@@ -44,6 +44,11 @@ MIN_SPAN_S = 600
 GATE_HORIZON_S = 1800
 BAND = 5
 
+CONTEXT_FIELDS = ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
+CONTEXT_DEFAULT = 200_000
+CONTEXT_LARGE = 1_000_000
+TRANSCRIPT_TAIL_BYTES = 512 * 1024
+
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 OAUTH_BETA = "oauth-2025-04-20"
 
@@ -390,6 +395,75 @@ def _first_ask_in_band(state: pathlib.Path, key: str, win: dict[str, Any]) -> bo
         return False
     _write_json_atomic(path, {"asked": (asked + [band])[-50:]})
     return True
+
+
+# --- context window usage ---------------------------------------------------
+
+
+def _tail_lines(path: pathlib.Path, limit: int = TRANSCRIPT_TAIL_BYTES) -> list[str]:
+    """Last `limit` bytes of a file as lines, without a partial first line."""
+    with open(path, "rb") as fh:
+        size = fh.seek(0, os.SEEK_END)
+        fh.seek(max(0, size - limit))
+        lines = fh.read().decode("utf-8", "replace").splitlines()
+    return lines[1:] if size > limit else lines
+
+
+def _usage_tokens(entry: Any) -> int:
+    """Input tokens of a main-thread assistant transcript entry, else 0."""
+    if not isinstance(entry, dict) or entry.get("type") != "assistant" or entry.get("isSidechain"):
+        return 0
+    msg = entry.get("message")
+    usage = msg.get("usage") if isinstance(msg, dict) else None
+    if not isinstance(usage, dict):
+        return 0
+    vals = (usage.get(k) for k in CONTEXT_FIELDS)
+    return sum(v for v in vals if isinstance(v, int) and not isinstance(v, bool))
+
+
+def context_size(used: int, env: Mapping[str, str]) -> int:
+    """Window size: QUOTA_GUARD_CONTEXT_WINDOW, else 1M once usage passes 200k."""
+    try:
+        override = int(env.get("QUOTA_GUARD_CONTEXT_WINDOW") or 0)
+    except ValueError:
+        override = 0
+    if override > 0:
+        return override
+    return CONTEXT_LARGE if used > CONTEXT_DEFAULT else CONTEXT_DEFAULT
+
+
+def context_usage(transcript_path: Any, env: Mapping[str, str]) -> dict[str, int] | None:
+    """Context in use at the last API response of this session, or None.
+
+    It is the input side of the last assistant message: uncached input plus
+    cache reads plus cache writes. Synthetic entries with zero usage are skipped.
+    """
+    if env.get("QUOTA_GUARD_CONTEXT") == "0" or not isinstance(transcript_path, str) or not transcript_path:
+        return None
+    try:
+        lines = _tail_lines(pathlib.Path(transcript_path))
+    except OSError:
+        return None
+    for line in reversed(lines):
+        try:
+            used = _usage_tokens(json.loads(line))
+        except ValueError:
+            continue
+        if used > 0:
+            return {"used": used, "size": context_size(used, env)}
+    return None
+
+
+def _fmt_tokens(n: int) -> str:
+    return f"{n / 1_000_000:g}M" if n >= 1_000_000 else f"{n / 1000:.0f}k"
+
+
+def format_context_line(usage: dict[str, int]) -> str:
+    pct = 100.0 * usage["used"] / usage["size"]
+    return (
+        f"Context: {pct:.0f}% used ({_fmt_tokens(usage['used'])}/{_fmt_tokens(usage['size'])} tokens, "
+        "as of the last response)"
+    )
 
 
 # --- OAuth refresh (background process only) --------------------------------

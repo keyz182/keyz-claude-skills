@@ -51,4 +51,9 @@ QUOTA_GUARD_GATE_MODE=deny gate | grep -q '"permissionDecision": "deny"' || fail
 out="$(echo 'garbage' | python3 "$PLUGIN_DIR/scripts/gate.py")" || fail "gate exited non-zero"
 [[ -z "$out" ]] || fail "gate should print nothing on bad input"
 
+# 6. Context line from the transcript named in the hook payload.
+printf '{"type":"assistant","message":{"usage":{"input_tokens":2,"cache_read_input_tokens":99000,"cache_creation_input_tokens":998}}}\n' >"$STATE/t.jsonl"
+printf '{"hook_event_name":"UserPromptSubmit","transcript_path":"%s"}' "$STATE/t.jsonl" |
+  python3 "$PLUGIN_DIR/scripts/inject.py" | grep -q '^Context: 50% used (100k/200k' || fail "expected context line"
+
 echo "smoke OK"

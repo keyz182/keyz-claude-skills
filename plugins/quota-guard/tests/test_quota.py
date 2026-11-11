@@ -244,6 +244,58 @@ class GateDecisionTests(TmpDirCase):
         self.assertIsNone(self.decide(99, {"QUOTA_GUARD_GATE_MODE": "off"}))
 
 
+def assistant(inp, read, create, sidechain=False):
+    usage = {"input_tokens": inp, "cache_read_input_tokens": read, "cache_creation_input_tokens": create}
+    return {"type": "assistant", "isSidechain": sidechain, "message": {"usage": usage}}
+
+
+def write_transcript(directory, entries):
+    path = pathlib.Path(directory) / "transcript.jsonl"
+    path.write_text("".join(json.dumps(e) + "\n" for e in entries))
+    return path
+
+
+class ContextTests(TmpDirCase):
+    def test_uses_last_main_thread_assistant(self):
+        path = write_transcript(self.dir, [
+            assistant(10, 1000, 0),
+            assistant(2, 120_000, 500),
+            {"type": "user", "message": {"content": "hi"}},
+            assistant(1, 999_000, 0, sidechain=True),
+            assistant(0, 0, 0),  # synthetic error entry
+            "not json",
+        ])
+        self.assertEqual(q.context_usage(str(path), {}), {"used": 120_502, "size": 200_000})
+
+    def test_large_window_inferred_above_200k(self):
+        path = write_transcript(self.dir, [assistant(0, 250_000, 0)])
+        self.assertEqual(q.context_usage(str(path), {})["size"], 1_000_000)
+
+    def test_window_override(self):
+        path = write_transcript(self.dir, [assistant(0, 50_000, 0)])
+        usage = q.context_usage(str(path), {"QUOTA_GUARD_CONTEXT_WINDOW": "1000000"})
+        self.assertEqual(usage["size"], 1_000_000)
+        self.assertEqual(q.context_usage(str(path), {"QUOTA_GUARD_CONTEXT_WINDOW": "junk"})["size"], 200_000)
+
+    def test_disabled_missing_or_empty(self):
+        path = write_transcript(self.dir, [assistant(0, 50_000, 0)])
+        self.assertIsNone(q.context_usage(str(path), {"QUOTA_GUARD_CONTEXT": "0"}))
+        self.assertIsNone(q.context_usage(str(self.dir / "missing.jsonl"), {}))
+        self.assertIsNone(q.context_usage(None, {}))
+        self.assertIsNone(q.context_usage(str(write_transcript(self.dir, [])), {}))
+
+    def test_tail_skips_partial_first_line(self):
+        path = write_transcript(self.dir, [assistant(0, 7, 0)] * 50)
+        lines = q._tail_lines(path, limit=200)
+        self.assertTrue(lines)
+        for line in lines:
+            json.loads(line)
+
+    def test_format(self):
+        line = q.format_context_line({"used": 450_000, "size": 1_000_000})
+        self.assertEqual(line, "Context: 45% used (450k/1M tokens, as of the last response)")
+
+
 class HookScriptTests(TmpDirCase):
     """End-to-end: run the hook scripts as Claude Code would."""
 
@@ -280,6 +332,19 @@ class HookScriptTests(TmpDirCase):
         out = self.run_hook("gate.py", json.dumps({"tool_name": "Agent"}))
         self.assertEqual(out.returncode, 0)
         self.assertEqual(json.loads(out.stdout)["hookSpecificOutput"]["permissionDecision"], "ask")
+
+    def test_inject_context_line_without_quota_data(self):
+        path = write_transcript(self.dir, [assistant(1000, 80_000, 5000)])
+        payload = json.dumps({"hook_event_name": "UserPromptSubmit", "transcript_path": str(path)})
+        out = self.run_hook("inject.py", payload)
+        self.assertEqual(out.returncode, 0)
+        self.assertEqual(out.stdout.strip(), "Context: 43% used (86k/200k tokens, as of the last response)")
+
+    def test_inject_bad_transcript_path_is_silent(self):
+        payload = json.dumps({"hook_event_name": "UserPromptSubmit", "transcript_path": "/nonexistent/x.jsonl"})
+        out = self.run_hook("inject.py", payload)
+        self.assertEqual(out.returncode, 0)
+        self.assertEqual(out.stdout, "")
 
     def test_fail_open_on_bad_stdin_and_dir(self):
         out = self.run_hook("gate.py", "not json", {"QUOTA_GUARD_DIR": "/proc/forbidden/x"})

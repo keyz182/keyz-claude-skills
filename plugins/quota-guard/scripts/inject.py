@@ -1,4 +1,4 @@
-"""UserPromptSubmit / SessionStart hook: add a one-line quota status to context.
+"""UserPromptSubmit / SessionStart hook: add quota and context-window status lines.
 
 Fails open: any error prints nothing and exits 0.
 """
@@ -19,16 +19,23 @@ WARNING = (
 UNKNOWN = "Quota: unknown (no fresh status-line snapshot; see quota-guard README)"
 
 
-def hook_event(raw: str) -> str | None:
+def parse_payload(raw: str) -> dict:
     try:
         payload = json.loads(raw)
     except ValueError:
-        return None
-    return payload.get("hook_event_name") if isinstance(payload, dict) else None
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def main() -> None:
-    event = hook_event(sys.stdin.read())
+    payload = parse_payload(sys.stdin.read())
+    print_quota(payload.get("hook_event_name"))
+    usage = q.context_usage(payload.get("transcript_path"), os.environ)
+    if usage:
+        print(q.format_context_line(usage))
+
+
+def print_quota(event: str | None) -> None:
     now = time.time()
     state = q.state_dir()
     model = q.load(state, now, os.environ)

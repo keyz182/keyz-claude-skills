@@ -1,8 +1,8 @@
 {
   "name": "quota-guard",
   "displayName": "Quota Guard",
-  "description": "Shows Claude your 5-hour and 7-day subscription quota on every prompt, warns when it runs low or will run out before reset at the current pace, and asks before spawning sub-agents or workflows when it is nearly used up.",
-  "version": "0.1.0",
+  "description": "Shows Claude your 5-hour and 7-day subscription quota and its context-window usage on every prompt, warns when it runs low or will run out before reset at the current pace, and asks before spawning sub-agents or workflows when it is nearly used up.",
+  "version": "0.2.0",
   "author": {
     "name": "Kieran Evans"
   },

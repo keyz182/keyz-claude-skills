@@ -10,6 +10,8 @@ It warns Claude when the quota is low. It asks you before Claude starts sub-agen
 | `SessionStart`, `UserPromptSubmit` | Adds one line to the context, for example `Quota: 5h 72% (resets 14:05, ~13:40 at current pace) \| 7d 41% (resets Thu 09:00) [statusline, 40s old]`. Adds a warning line at the warn threshold, or when the current pace runs out the quota before the reset. |
 | `PreToolUse` on `Agent`, `Task`, `Workflow` | At the gate threshold, or when the quota runs out in less than 30 minutes at the current pace, asks you to approve the tool. It asks one time for each 5% band in a window. |
 
+The same hooks also add a context line, for example `Context: 43% used (86k/200k tokens, as of the last response)`. Claude Code shows the context meter to you (`/context`, the status line) but not to Claude. The hook reads the token usage of the last assistant message in the session transcript (`transcript_path` in the hook input). It needs no status-line set-up. The figure is one response old: it does not include the prompt you just sent.
+
 When no quota data is available, Quota Guard adds `Quota: unknown` one time at session start. It adds nothing to later prompts until data is available.
 
 All hooks fail open. If a hook has an error, it prints nothing and the prompt or tool continues.
@@ -65,6 +67,8 @@ Set these environment variables, for example in `settings.json` under `env`.
 | `QUOTA_GUARD_GATE_5H` / `QUOTA_GUARD_GATE_7D` | `90` / `95` | Percent that gates `Agent`, `Task` and `Workflow`. |
 | `QUOTA_GUARD_GATE_MODE` | `ask` | `ask`, `deny` or `off`. In headless `claude -p`, `ask` blocks the tool, also with `--permission-mode bypassPermissions`. |
 | `QUOTA_GUARD_OAUTH` | unset | `1` turns on the usage-endpoint fallback. |
+| `QUOTA_GUARD_CONTEXT` | unset | `0` turns off the context line. |
+| `QUOTA_GUARD_CONTEXT_WINDOW` | auto | Context window size in tokens. Auto is 200000, or 1000000 when usage is above 200000. Set `1000000` for a 1M-context model, so the percent is right from the start. |
 | `QUOTA_GUARD_DIR` | `~/.claude/quota-guard` | State directory. |
 | `QUOTA_GUARD_DEBUG` | unset | `1` writes errors to `debug.log` in the state directory. Tokens are never written. |
 
@@ -90,3 +94,5 @@ bash plugins/quota-guard/tests/smoke.sh
 - The usage endpoint is not documented. Its terms-of-service position is not clear. It is a fallback only and is off by default.
 - Father Time 1.9 also calls the usage endpoint. Both cache the result, so the extra calls are few.
 - Data older than 15 minutes is not shown.
+- The context line reads the transcript format, which is not documented and can change. If the format changes, the line stops. The hooks do not fail.
+- The hook cannot tell a 1M-context model from a 200k one until usage passes 200k. Set `QUOTA_GUARD_CONTEXT_WINDOW` if you use a 1M-context model.
