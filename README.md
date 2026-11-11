@@ -20,6 +20,7 @@ This repository is a plugin marketplace for [Claude Code](https://claude.com/cla
 
 | Plugin | Description |
 |--------|-------------|
+| [adversarial-review](plugins/adversarial-review/README.md) | Adds a skill that looks for the reasons a plan, design, diff or decision will fail. Rates each concern against a fixed severity bar. Ends with one verdict: PROCEED, AMEND or RETHINK. |
 | [quota-guard](plugins/quota-guard/README.md) | Shows Claude your 5-hour and 7-day subscription quota on each prompt. Warns when the quota is low. Asks before Claude starts sub-agents or workflows when the quota is almost used. |
 
 ## Tests

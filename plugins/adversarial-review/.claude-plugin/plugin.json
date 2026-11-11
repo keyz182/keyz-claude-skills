@@ -1,0 +1,12 @@
+{
+  "name": "adversarial-review",
+  "displayName": "Adversarial Review",
+  "description": "Adds an adversarial-review skill that looks for the reasons a plan, design, diff or decision will fail, ranks the concerns by a fixed severity bar, and ends with one verdict.",
+  "version": "0.2.0",
+  "author": {
+    "name": "Kieran Evans"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/keyz182/keyz-claude-skills/tree/main/plugins/adversarial-review",
+  "repository": "https://github.com/keyz182/keyz-claude-skills"
+}

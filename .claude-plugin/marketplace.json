@@ -6,6 +6,12 @@
   },
   "plugins": [
     {
+      "name": "adversarial-review",
+      "source": "./plugins/adversarial-review",
+      "description": "Adds an adversarial-review skill that looks for the reasons a plan, design, diff or decision will fail, ranks the concerns by a fixed severity bar, and ends with one verdict.",
+      "displayName": "Adversarial Review"
+    },
+    {
       "name": "quota-guard",
       "source": "./plugins/quota-guard",
       "description": "Shows Claude your 5-hour and 7-day subscription quota on every prompt, warns when it runs low or will run out before reset at the current pace, and asks before spawning sub-agents or workflows when it is nearly used up.",
