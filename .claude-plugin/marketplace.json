@@ -1,0 +1,15 @@
+{
+  "name": "keyz-claude-skills",
+  "description": "Claude Code plugins by Kieran Evans.",
+  "owner": {
+    "name": "Kieran Evans"
+  },
+  "plugins": [
+    {
+      "name": "quota-guard",
+      "source": "./plugins/quota-guard",
+      "description": "Shows Claude your 5-hour and 7-day subscription quota on every prompt, warns when it runs low or will run out before reset at the current pace, and asks before spawning sub-agents or workflows when it is nearly used up.",
+      "displayName": "Quota Guard"
+    }
+  ]
+}
