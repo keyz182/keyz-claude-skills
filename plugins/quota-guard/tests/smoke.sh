@@ -56,4 +56,9 @@ printf '{"type":"assistant","message":{"usage":{"input_tokens":2,"cache_read_inp
 printf '{"hook_event_name":"UserPromptSubmit","transcript_path":"%s"}' "$STATE/t.jsonl" |
   python3 "$PLUGIN_DIR/scripts/inject.py" | grep -q '^Context: 50% used (100k/200k' || fail "expected context line"
 
+# 7. Window size from this session's status-line snapshot.
+printf '{"context_window":{"context_window_size":1000000},"written_at":%s}' "$(date +%s)" >"$STATE/snapshots/big.json"
+printf '{"hook_event_name":"UserPromptSubmit","session_id":"big","transcript_path":"%s"}' "$STATE/t.jsonl" |
+  python3 "$PLUGIN_DIR/scripts/inject.py" | grep -q '^Context: 10% used (100k/1M' || fail "expected 1M window from snapshot"
+
 echo "smoke OK"

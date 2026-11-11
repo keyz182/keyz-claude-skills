@@ -421,18 +421,33 @@ def _usage_tokens(entry: Any) -> int:
     return sum(v for v in vals if isinstance(v, int) and not isinstance(v, bool))
 
 
-def context_size(used: int, env: Mapping[str, str]) -> int:
-    """Window size: QUOTA_GUARD_CONTEXT_WINDOW, else 1M once usage passes 200k."""
+def snapshot_context_size(state: pathlib.Path, session_id: Any) -> int | None:
+    """context_window_size the status line saved for this session, or None."""
+    if not isinstance(session_id, str) or not session_id.replace("-", "").replace("_", "").isalnum():
+        return None  # also blocks path traversal via a crafted session_id
+    doc = _read_json(state / "snapshots" / f"{session_id}.json")
+    cw = doc.get("context_window") if isinstance(doc, dict) else None
+    size = cw.get("context_window_size") if isinstance(cw, dict) else None
+    return size if isinstance(size, int) and not isinstance(size, bool) and size > 0 else None
+
+
+def context_size(used: int, env: Mapping[str, str], known: int | None = None) -> int:
+    """Window size: QUOTA_GUARD_CONTEXT_WINDOW, else the status-line value,
+    else 1M once usage passes 200k."""
     try:
         override = int(env.get("QUOTA_GUARD_CONTEXT_WINDOW") or 0)
     except ValueError:
         override = 0
     if override > 0:
         return override
+    if known:
+        return known
     return CONTEXT_LARGE if used > CONTEXT_DEFAULT else CONTEXT_DEFAULT
 
 
-def context_usage(transcript_path: Any, env: Mapping[str, str]) -> dict[str, int] | None:
+def context_usage(
+    transcript_path: Any, env: Mapping[str, str], known_size: int | None = None
+) -> dict[str, int] | None:
     """Context in use at the last API response of this session, or None.
 
     It is the input side of the last assistant message: uncached input plus
@@ -450,7 +465,7 @@ def context_usage(transcript_path: Any, env: Mapping[str, str]) -> dict[str, int
         except ValueError:
             continue
         if used > 0:
-            return {"used": used, "size": context_size(used, env)}
+            return {"used": used, "size": context_size(used, env, known_size)}
     return None
 
 

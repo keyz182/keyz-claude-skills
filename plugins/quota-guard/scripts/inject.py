@@ -30,7 +30,8 @@ def parse_payload(raw: str) -> dict:
 def main() -> None:
     payload = parse_payload(sys.stdin.read())
     print_quota(payload.get("hook_event_name"))
-    usage = q.context_usage(payload.get("transcript_path"), os.environ)
+    known = q.snapshot_context_size(q.state_dir(), payload.get("session_id"))
+    usage = q.context_usage(payload.get("transcript_path"), os.environ, known)
     if usage:
         print(q.format_context_line(usage))
 

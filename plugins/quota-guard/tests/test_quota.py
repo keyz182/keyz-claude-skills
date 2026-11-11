@@ -277,6 +277,26 @@ class ContextTests(TmpDirCase):
         self.assertEqual(usage["size"], 1_000_000)
         self.assertEqual(q.context_usage(str(path), {"QUOTA_GUARD_CONTEXT_WINDOW": "junk"})["size"], 200_000)
 
+    def test_snapshot_size_beats_guess_but_not_override(self):
+        snap = {"written_at": NOW, "context_window": {"context_window_size": 1_000_000}}
+        (self.dir / "snapshots" / "s-1.json").write_text(json.dumps(snap))
+        known = q.snapshot_context_size(self.dir, "s-1")
+        self.assertEqual(known, 1_000_000)
+        path = write_transcript(self.dir, [assistant(0, 50_000, 0)])
+        self.assertEqual(q.context_usage(str(path), {}, known)["size"], 1_000_000)
+        override = {"QUOTA_GUARD_CONTEXT_WINDOW": "200000"}
+        self.assertEqual(q.context_usage(str(path), override, known)["size"], 200_000)
+
+    def test_snapshot_size_rejects_bad_ids_and_values(self):
+        self.assertIsNone(q.snapshot_context_size(self.dir, "../etc/passwd"))
+        self.assertIsNone(q.snapshot_context_size(self.dir, None))
+        self.assertIsNone(q.snapshot_context_size(self.dir, "missing"))
+        (self.dir / "snapshots" / "old.json").write_text(json.dumps({"rate_limits": {}}))
+        self.assertIsNone(q.snapshot_context_size(self.dir, "old"))
+        bad = {"context_window": {"context_window_size": True}}
+        (self.dir / "snapshots" / "bad.json").write_text(json.dumps(bad))
+        self.assertIsNone(q.snapshot_context_size(self.dir, "bad"))
+
     def test_disabled_missing_or_empty(self):
         path = write_transcript(self.dir, [assistant(0, 50_000, 0)])
         self.assertIsNone(q.context_usage(str(path), {"QUOTA_GUARD_CONTEXT": "0"}))
