@@ -431,9 +431,21 @@ def snapshot_context_size(state: pathlib.Path, session_id: Any) -> int | None:
     return size if isinstance(size, int) and not isinstance(size, bool) and size > 0 else None
 
 
-def context_size(used: int, env: Mapping[str, str], known: int | None = None) -> int:
+LARGE_CONTEXT_MODELS = ("opus", "fable", "mythos")
+
+
+def _entry_model(entry: Any) -> str:
+    """Model id of a transcript entry, lower case, or an empty string."""
+    msg = entry.get("message") if isinstance(entry, dict) else None
+    model = msg.get("model") if isinstance(msg, dict) else None
+    return model.lower() if isinstance(model, str) else ""
+
+
+def context_size(
+    used: int, env: Mapping[str, str], known: int | None = None, model: str = ""
+) -> int:
     """Window size: QUOTA_GUARD_CONTEXT_WINDOW, else the status-line value,
-    else 1M once usage passes 200k."""
+    else 1M for a 1M-window model, else 1M once usage passes 200k."""
     try:
         override = int(env.get("QUOTA_GUARD_CONTEXT_WINDOW") or 0)
     except ValueError:
@@ -442,6 +454,8 @@ def context_size(used: int, env: Mapping[str, str], known: int | None = None) ->
         return override
     if known:
         return known
+    if "[1m]" in model or any(name in model for name in LARGE_CONTEXT_MODELS):
+        return CONTEXT_LARGE
     return CONTEXT_LARGE if used > CONTEXT_DEFAULT else CONTEXT_DEFAULT
 
 
@@ -461,11 +475,13 @@ def context_usage(
         return None
     for line in reversed(lines):
         try:
-            used = _usage_tokens(json.loads(line))
+            entry = json.loads(line)
         except ValueError:
             continue
+        used = _usage_tokens(entry)
         if used > 0:
-            return {"used": used, "size": context_size(used, env, known_size)}
+            size = context_size(used, env, known_size, _entry_model(entry))
+            return {"used": used, "size": size}
     return None
 
 

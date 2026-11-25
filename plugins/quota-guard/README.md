@@ -12,7 +12,7 @@ It warns Claude when the quota is low. It asks you before Claude starts sub-agen
 
 The same hooks also add a context line, for example `Context: 43% used (86k/200k tokens, as of the last response)`. Claude Code shows the context meter to you (`/context`, the status line) but not to Claude. The hook reads the token usage of the last assistant message in the session transcript (`transcript_path` in the hook input). The figure is one response old: it does not include the prompt you just sent.
 
-The transcript does not record the window size. With the status-line lines below, the hook uses the exact size that Claude Code sends to the status line (`context_window.context_window_size`). Without them, the hook assumes 200k until usage passes 200k.
+The transcript does not record the window size. With the status-line lines below, the hook uses the exact size that Claude Code sends to the status line (`context_window.context_window_size`). Without them, the hook reads the model id from the transcript. Opus, Fable and Mythos models, and any model id with `[1m]`, get a 1M window. Other models get 200k until usage passes 200k.
 
 When no quota data is available, Quota Guard adds `Quota: unknown` one time at session start. It adds nothing to later prompts until data is available.
 
@@ -97,4 +97,4 @@ bash plugins/quota-guard/tests/smoke.sh
 - Father Time 1.9 also calls the usage endpoint. Both cache the result, so the extra calls are few.
 - Data older than 15 minutes is not shown.
 - The context line reads the transcript format, which is not documented and can change. If the format changes, the line stops. The hooks do not fail.
-- Without the status-line lines, the hook cannot tell a 1M-context model from a 200k one until usage passes 200k. Add the lines, or set `QUOTA_GUARD_CONTEXT_WINDOW`.
+- Without the status-line lines, the window size comes from the model id. An older Opus model with a 200k window shows as 1M. Add the lines, or set `QUOTA_GUARD_CONTEXT_WINDOW`.
