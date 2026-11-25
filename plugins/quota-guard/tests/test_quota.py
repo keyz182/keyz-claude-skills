@@ -244,9 +244,12 @@ class GateDecisionTests(TmpDirCase):
         self.assertIsNone(self.decide(99, {"QUOTA_GUARD_GATE_MODE": "off"}))
 
 
-def assistant(inp, read, create, sidechain=False):
+def assistant(inp, read, create, sidechain=False, model=None):
     usage = {"input_tokens": inp, "cache_read_input_tokens": read, "cache_creation_input_tokens": create}
-    return {"type": "assistant", "isSidechain": sidechain, "message": {"usage": usage}}
+    message = {"usage": usage}
+    if model is not None:
+        message["model"] = model
+    return {"type": "assistant", "isSidechain": sidechain, "message": message}
 
 
 def write_transcript(directory, entries):
@@ -286,6 +289,19 @@ class ContextTests(TmpDirCase):
         self.assertEqual(q.context_usage(str(path), {}, known)["size"], 1_000_000)
         override = {"QUOTA_GUARD_CONTEXT_WINDOW": "200000"}
         self.assertEqual(q.context_usage(str(path), override, known)["size"], 200_000)
+
+    def test_large_window_from_model_below_200k(self):
+        for model in ("claude-opus-5-5", "claude-fable-5-2", "claude-sonnet-5-5[1m]"):
+            path = write_transcript(self.dir, [assistant(0, 192_000, 0, model=model)])
+            self.assertEqual(q.context_usage(str(path), {})["size"], 1_000_000, model)
+        path = write_transcript(self.dir, [assistant(0, 192_000, 0, model="claude-haiku-5-5")])
+        self.assertEqual(q.context_usage(str(path), {})["size"], 200_000)
+
+    def test_snapshot_and_override_beat_model(self):
+        path = write_transcript(self.dir, [assistant(0, 50_000, 0, model="claude-opus-5-5")])
+        self.assertEqual(q.context_usage(str(path), {}, 200_000)["size"], 200_000)
+        override = {"QUOTA_GUARD_CONTEXT_WINDOW": "200000"}
+        self.assertEqual(q.context_usage(str(path), override)["size"], 200_000)
 
     def test_snapshot_size_rejects_bad_ids_and_values(self):
         self.assertIsNone(q.snapshot_context_size(self.dir, "../etc/passwd"))
